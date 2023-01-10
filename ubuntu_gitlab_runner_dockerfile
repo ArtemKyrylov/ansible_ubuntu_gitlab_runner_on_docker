@@ -1,0 +1,45 @@
+FROM ubuntu:20.04
+
+RUN groupadd ansible
+RUN useradd -rm -d /home/ansible -s /bin/bash -g root -G sudo,ansible -u 1001 ansible
+
+WORKDIR /home/ansible
+
+RUN apt-get update && apt-get install apt-utils -y
+RUN apt-get install ca-certificates -y
+
+RUN apt-get install -y --no-install-recommends curl dumb-init git libltdl7 wget openssh-client procps
+
+RUN DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC apt-get -y install tzdata
+RUN apt-get install -y vim python3 python3-pip openssh-server
+RUN pip3 install setuptools-rust
+RUN pip3 install --upgrade pip
+RUN pip3 install ansible
+
+# Install git LFS
+RUN wget --content-disposition https://packagecloud.io/github/git-lfs/packages/ubuntu/bionic/git-lfs_2.10.0_amd64.deb/download.deb?distro_version_id=190
+RUN dpkg -i git-lfs_2.10.0_amd64.deb
+
+# Tweak global SSH client configuration
+RUN sed -i '/^Host \*/a \ \ \ \ ServerAliveInterval 30' /etc/ssh/ssh_config \
+    && sed -i '/^Host \*/a \ \ \ \ StrictHostKeyChecking no' /etc/ssh/ssh_config \
+    && sed -i '/^Host \*/a \ \ \ \ UserKnownHostsFile /dev/null' /etc/ssh/ssh_config
+
+COPY ansible/ /home
+
+RUN mkdir -p /home/ansible/.ssh
+RUN mkdir -p /home/vault/certs/
+
+COPY ./keys/id_rsa /home/ansible/.ssh/
+COPY ./keys/id_rsa.pub /home/ansible/.ssh/
+COPY ./keys/ca_certificates.yml /home/vault/certs/
+
+RUN chmod -R 600 /home/ansible/.ssh/*
+RUN chmod 700 /home/ansible/.ssh
+RUN chown -R ansible:ansible /home/ansible/.ssh && chown -R ansible:ansible /home/ansible/.ssh/*
+
+RUN chmod -R 600 /home/vault/certs/*
+RUN chmod 700 /home/vault/certs/
+RUN chown -R ansible:ansible /home/vault/certs/ && chown -R ansible:ansible /home/vault/certs/*
+
+USER ansible
